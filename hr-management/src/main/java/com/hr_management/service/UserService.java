@@ -119,7 +119,7 @@ public class UserService implements UserDetailsService {
     private String normalizeDepartment(String deptName) {
         if (deptName == null) return null;
         if (deptName.toLowerCase().contains("admin")) {
-            return deptName.toLowerCase().contains("administration") ? "Administration" : "Admin";
+            return "Admin (Administration)"; // Match the exact database name
         }
         return deptName;
     }
@@ -129,8 +129,7 @@ public class UserService implements UserDetailsService {
         String normalizedDept = normalizeDepartment(department);
         logger.debug("Normalized department: {}", normalizedDept);
 
-        if ((normalizedDept != null && (normalizedDept.equalsIgnoreCase("Admin") || normalizedDept.equalsIgnoreCase("Administration"))
-                && role != null && role.equalsIgnoreCase("HR")) ||
+        if ((normalizedDept != null && normalizedDept.equals("Admin (Administration)") && role != null && role.equalsIgnoreCase("HR")) ||
                 (role != null && role.equalsIgnoreCase("director"))) {
             logger.debug("No reporting persons required for role: {}, department: {}", role, normalizedDept);
             return Collections.emptyList();
@@ -164,7 +163,7 @@ public class UserService implements UserDetailsService {
         return dtos;
     }
 
-    public PendingSignup signup(UserDTO userDTO) { // Change return type to PendingSignup
+    public PendingSignup signup(UserDTO userDTO) {
         logger.info("Processing signup for username: {}", userDTO.getUsername());
         // Check uniqueness in both users and pending_signups
         if (userRepository.existsByUsername(userDTO.getUsername()) || pendingSignupRepository.existsByUsername(userDTO.getUsername())) {
@@ -198,6 +197,16 @@ public class UserService implements UserDetailsService {
                     .orElseThrow(() -> new IllegalArgumentException("Department not found: " + normalizedDept));
         }
 
+        // Check if reporting person is required
+        boolean isReportingPersonRequired = !(
+                (normalizedDept != null && normalizedDept.equals("Admin (Administration)") && "HR".equalsIgnoreCase(userDTO.getRole())) ||
+                        "director".equalsIgnoreCase(userDTO.getRole())
+        );
+
+        if (isReportingPersonRequired && userDTO.getReportingToId() == null) {
+            throw new IllegalArgumentException("Reporting person is required for this role and department");
+        }
+
         PendingSignup pendingSignup = new PendingSignup();
         pendingSignup.setFullName(userDTO.getFullName());
         pendingSignup.setUsername(userDTO.getUsername());
@@ -210,10 +219,12 @@ public class UserService implements UserDetailsService {
         pendingSignup.setEmployeeId(userDTO.getEmployeeId());
         pendingSignup.setStatus("PENDING");
 
-        if (userDTO.getReportingToId() != null) {
+        if (isReportingPersonRequired && userDTO.getReportingToId() != null) {
             User reportingTo = userRepository.findById(userDTO.getReportingToId())
                     .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
             pendingSignup.setReportingTo(reportingTo);
+        } else {
+            pendingSignup.setReportingTo(null);
         }
 
         PendingSignup savedPendingSignup = pendingSignupRepository.save(pendingSignup);

@@ -28,7 +28,7 @@ public class User {
     private String email;
 
     @Column
-    private String department; // Temporary storage for department name
+    private String department;
 
     @Column(name = "join_date", nullable = false, updatable = false)
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
@@ -61,17 +61,32 @@ public class User {
 
     @ManyToOne
     @JoinColumn(name = "reporting_to")
-    @JsonBackReference // Prevent infinite recursion
+    @JsonBackReference
     private User reportingTo;
 
     @OneToMany(mappedBy = "reportingTo")
-    @JsonManagedReference // Serialize subordinates
+    @JsonManagedReference
     private List<User> subordinates;
 
     @Column(name = "employee_id", nullable = false, unique = true)
     private String employeeId;
 
-    // Getters and Setters (unchanged)
+    @Column(name = "dob")
+    private LocalDate dob;
+
+    @Column(name = "father_name")
+    private String fatherName;
+
+    @Column(name = "mother_name")
+    private String motherName;
+
+    @Column(name = "is_fresher", nullable = false)
+    private Boolean isFresher = true;
+
+    @Column(name = "profile_verification_status", nullable = false)
+    private String profileVerificationStatus = "PENDING";
+
+    // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getFullName() { return fullName; }
@@ -111,4 +126,16 @@ public class User {
     public void setSubordinates(List<User> subordinates) { this.subordinates = subordinates; }
     public String getEmployeeId() { return employeeId; }
     public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
+    public LocalDate getDob() { return dob; }
+    public void setDob(LocalDate dob) { this.dob = dob; }
+    public String getFatherName() { return fatherName; }
+    public void setFatherName(String fatherName) { this.fatherName = fatherName; }
+    public String getMotherName() { return motherName; }
+    public void setMotherName(String motherName) { this.motherName = motherName; }
+    public Boolean getIsFresher() { return isFresher; }
+    public void setIsFresher(Boolean isFresher) { this.isFresher = isFresher; }
+    public String getProfileVerificationStatus() { return profileVerificationStatus; }
+    public void setProfileVerificationStatus(String profileVerificationStatus) {
+        this.profileVerificationStatus = profileVerificationStatus;
+    }
 }
