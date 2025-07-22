@@ -11,4 +11,5 @@ public interface PendingSignupRepository extends JpaRepository<PendingSignup, Lo
     boolean existsByEmail(String email);
     boolean existsByEmployeeId(String employeeId);
     List<PendingSignup> findByStatus(String status);
+    List<PendingSignup> findByRoleIgnoreCaseAndStatus(String role, String status);
 }

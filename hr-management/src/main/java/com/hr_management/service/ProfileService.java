@@ -7,18 +7,20 @@ import com.hr_management.Repository.UserRepository;
 import com.hr_management.dto.ProfileDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 
 @Service
 public class ProfileService {
@@ -29,132 +31,107 @@ public class ProfileService {
     @Autowired
     private DocumentRepository documentRepository;
 
-    private final String uploadDir = "uploads/";
+    private final Path rootLocation = Paths.get("uploads");
 
-    public User getUserByUsername(String username) {
-        Optional<User> user = userRepository.findByUsername(username);
-        if (user.isEmpty()) {
-            throw new IllegalArgumentException("User not found");
+    // These lists should match the frontend exactly
+    private final List<String> documentTypes = Arrays.asList(
+            "aadhaar", "pan", "marksheets", "offer_letter", "joining_form",
+            "isa_form", "affidavit", "police_verification", "passbook_copy"
+    );
+
+    private final List<String> previousCompanyDocumentTypes = Arrays.asList(
+            "experience_letter", "payslips", "relieving_letter"
+    );
+
+    public ProfileService() {
+        try {
+            Files.createDirectories(rootLocation);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not initialize storage", e);
         }
-        return user.get();
     }
 
-    public ProfileDTO getProfileStatus(String username) {
-        User user = getUserByUsername(username);
-        ProfileDTO profileDTO = new ProfileDTO();
-        profileDTO.setStatus(user.getProfileVerificationStatus());
-        profileDTO.setDob(user.getDob() != null ? user.getDob().toString() : "");
-        profileDTO.setFatherName(user.getFatherName());
-        profileDTO.setMotherName(user.getMotherName());
-        profileDTO.setIsFresher(user.getIsFresher());
+    @Transactional
+    public void submitProfile(String username, ProfileDTO profileDTO, Map<String, String> textParts, Map<String, MultipartFile> fileParts) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with username: " + username));
 
-        Map<String, String> documents = new HashMap<>();
-        Map<String, String> previousCompanyDocuments = new HashMap<>();
-        for (Document doc : documentRepository.findByUserId(user.getId())) {
-            if (doc.getIsPreviousCompany()) {
-                previousCompanyDocuments.put(doc.getDocumentType(), doc.getFilePath());
-            } else {
-                documents.put(doc.getDocumentType(), doc.getFilePath());
-            }
-        }
-        profileDTO.setDocuments(documents);
-        profileDTO.setPreviousCompanyDocuments(previousCompanyDocuments);
-        return profileDTO;
-    }
-
-    public void submitProfile(String username, ProfileDTO profileDTO, MultipartFile photo,
-                              Map<String, MultipartFile> documents, Map<String, MultipartFile> previousCompanyDocuments) {
-        User user = getUserByUsername(username);
-
-        if (user.getProfileVerificationStatus().equals("SUBMITTED") || user.getProfileVerificationStatus().equals("VERIFIED")) {
-            throw new IllegalArgumentException("Profile already submitted or verified");
+        if ("SUBMITTED".equals(user.getProfileVerificationStatus()) || "VERIFIED".equals(user.getProfileVerificationStatus())) {
+            throw new IllegalStateException("Profile has already been submitted or verified and cannot be changed.");
         }
 
-        if (profileDTO.getDob() == null || profileDTO.getFatherName() == null ||
-                profileDTO.getMotherName() == null || photo == null || photo.isEmpty()) {
-            throw new IllegalArgumentException("All required fields and photo must be provided");
-        }
-
-        if (documents == null || documents.isEmpty()) {
-            throw new IllegalArgumentException("At least one document must be uploaded");
-        }
-
-        if (!profileDTO.getIsFresher() && (previousCompanyDocuments == null || previousCompanyDocuments.isEmpty())) {
-            throw new IllegalArgumentException("At least one previous company document must be uploaded for non-freshers");
-        }
-
-        // Update user profile fields
+        // --- 1. Update User Entity Fields ---
+        // IMPORTANT: Your User.java entity MUST have these fields and their setters.
         user.setDob(LocalDate.parse(profileDTO.getDob()));
         user.setFatherName(profileDTO.getFatherName());
         user.setMotherName(profileDTO.getMotherName());
+        user.setEmergencyContactNumber(profileDTO.getEmergencyContactNumber());
         user.setIsFresher(profileDTO.getIsFresher());
         user.setProfileVerificationStatus("SUBMITTED");
 
-        // Create upload directory if it doesn't exist
-        File directory = new File(uploadDir);
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
+        // --- 2. Process and Save All Files ---
+        // Save Photo
+        saveFileAndCreateDocument(user, fileParts.get("photo"), "photo", false, null);
 
-        // Save profile photo
-        if (!photo.isEmpty()) {
-            String photoFileName = username + "_" + photo.getOriginalFilename();
-            Path photoPath = Paths.get(uploadDir + photoFileName);
-            try {
-                Files.write(photoPath, photo.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                Document photoDoc = new Document();
-                photoDoc.setUser(user);
-                photoDoc.setDocumentType("photo");
-                photoDoc.setFilePath("/uploads/" + photoFileName);
-                documentRepository.save(photoDoc);
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to save photo: " + e.getMessage());
+        // Save Standard Documents
+        for (String docType : documentTypes) {
+            if (fileParts.containsKey(docType)) {
+                saveFileAndCreateDocument(user, fileParts.get(docType), docType, false, null);
             }
         }
 
-        // Save documents
-        if (documents != null) {
-            for (Map.Entry<String, MultipartFile> entry : documents.entrySet()) {
-                MultipartFile file = entry.getValue();
-                if (!file.isEmpty()) {
-                    String fileName = username + "_" + entry.getKey() + "_" + file.getOriginalFilename();
-                    Path filePath = Paths.get(uploadDir + fileName);
-                    try {
-                        Files.write(filePath, file.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                        Document doc = new Document();
-                        doc.setUser(user);
-                        doc.setDocumentType(entry.getKey());
-                        doc.setFilePath("/uploads/" + fileName);
-                        documentRepository.save(doc);
-                    } catch (IOException e) {
-                        throw new RuntimeException("Failed to save document: " + e.getMessage());
-                    }
+        // Save Previous Company Documents (if not a fresher)
+        if (!profileDTO.getIsFresher()) {
+            for (String docType : previousCompanyDocumentTypes) {
+                if (fileParts.containsKey(docType)) {
+                    saveFileAndCreateDocument(user, fileParts.get(docType), docType, true, null);
                 }
             }
         }
 
-        // Save previous company documents
-        if (previousCompanyDocuments != null && !profileDTO.getIsFresher()) {
-            for (Map.Entry<String, MultipartFile> entry : previousCompanyDocuments.entrySet()) {
-                MultipartFile file = entry.getValue();
-                if (!file.isEmpty()) {
-                    String fileName = username + "_" + entry.getKey() + "_" + file.getOriginalFilename();
-                    Path filePath = Paths.get(uploadDir + fileName);
-                    try {
-                        Files.write(filePath, file.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                        Document doc = new Document();
-                        doc.setUser(user);
-                        doc.setDocumentType(entry.getKey());
-                        doc.setFilePath("/uploads/" + fileName);
-                        doc.setIsPreviousCompany(true);
-                        documentRepository.save(doc);
-                    } catch (IOException e) {
-                        throw new RuntimeException("Failed to save previous company document: " + e.getMessage());
-                    }
+        // Save Additional Documents
+        for (Map.Entry<String, String> entry : textParts.entrySet()) {
+            if (entry.getKey().startsWith("additionalDocument") && entry.getKey().endsWith("_name")) {
+                String customDocName = entry.getValue();
+                String fileKey = entry.getKey().replace("_name", "_file");
+                MultipartFile file = fileParts.get(fileKey);
+                if (file != null && !file.isEmpty() && customDocName != null && !customDocName.isEmpty()) {
+                    saveFileAndCreateDocument(user, file, "additional_document", false, customDocName);
                 }
             }
         }
 
+        // --- 3. Save the updated User object ---
         userRepository.save(user);
+    }
+
+    private void saveFileAndCreateDocument(User user, MultipartFile file, String docType, boolean isPreviousCompany, String customDocName) {
+        if (file == null || file.isEmpty()) {
+            // Depending on requirements, you might throw an exception or just return
+            // For now, we'll just return, assuming not all documents are mandatory
+            return;
+        }
+
+        String originalFilename = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
+        String filename = user.getUsername() + "_" + docType + "_" + System.currentTimeMillis() + "_" + originalFilename;
+
+        try {
+            Path destinationFile = this.rootLocation.resolve(filename).normalize().toAbsolutePath();
+            Files.copy(file.getInputStream(), destinationFile, StandardCopyOption.REPLACE_EXISTING);
+
+            Document document = new Document();
+            document.setUser(user);
+            document.setDocumentType(docType);
+            document.setFilePath(destinationFile.toString());
+            document.setIsPreviousCompany(isPreviousCompany);
+
+            if (customDocName != null && !customDocName.isEmpty()) {
+                document.setCustomDocumentName(customDocName);
+            }
+
+            documentRepository.save(document);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to store file " + filename, e);
+        }
     }
 }

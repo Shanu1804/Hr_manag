@@ -43,6 +43,17 @@ public class EmailService {
         message.setFrom(fromEmail);
         mailSender.send(message);
     }
+    public void sendHrSignupConfirmationEmail(String toEmail, String fullName) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(toEmail);
+        message.setSubject("BISAG-N HR System - HR Signup Request Submitted");
+        message.setText("Dear " + fullName + ",\n\n" +
+                "Your HR signup request for the BISAG-N HR Management System has been successfully submitted.\n" +
+                "It is currently awaiting approval from our admin team. You will be notified once your HR account is reviewed.\n\n" +
+                "Best regards,\nBISAG-N Team");
+        message.setFrom(fromEmail);
+        mailSender.send(message);
+    }
 
     public void sendSignupApprovalEmail(String toEmail, String fullName) {
         SimpleMailMessage message = new SimpleMailMessage();

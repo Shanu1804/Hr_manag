@@ -241,4 +241,73 @@ public class UserController {
             return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
         }
     }
+    @PostMapping("/superadmin/approve-hr-signup/{userId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> approveHrSignup(@PathVariable Long userId) {
+        logger.info("Super Admin approving HR signup for user id: {}", userId);
+        try {
+            userService.approveUser(userId); // Reuses existing approveUser method
+            return ResponseEntity.ok(new AuthController.SuccessResponse("HR user approved successfully by Super Admin"));
+        } catch (IllegalArgumentException e) {
+            logger.warn("Failed to approve HR signup: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Unexpected error approving HR signup: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/superadmin/disapprove-hr-signup/{userId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> disapproveHrSignup(@PathVariable Long userId, @RequestBody Map<String, String> request) {
+        logger.info("Super Admin disapproving HR signup for user id: {}", userId);
+        String reason = request.get("reason");
+        if (reason == null || reason.trim().isEmpty()) {
+            logger.warn("Disapproval reason is required");
+            return ResponseEntity.badRequest().body(new AuthController.ErrorResponse("Reason for disapproval is required"));
+        }
+        try {
+            userService.rejectUser(userId, reason);
+            return ResponseEntity.ok(new AuthController.SuccessResponse("HR signup request rejected successfully by Super Admin"));
+        } catch (IllegalArgumentException e) {
+            logger.warn("Failed to disapprove HR signup: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(new AuthController.ErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Unexpected error disapproving HR signup: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
+        }
+    }
+    @GetMapping("/superadmin/pending-signups")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<List<UserDTO>> getSuperAdminPendingSignups() {
+        logger.info("Fetching pending signups for Super Admin");
+        try {
+            // AB YEH SIRF HR KI REQUESTS LAANE WALA SAHI METHOD CALL KAREGA
+            List<PendingSignup> pendingSignups = userService.getPendingHrSignups();
+
+            List<UserDTO> userDTOs = pendingSignups.stream().map(pending -> {
+                UserDTO dto = new UserDTO();
+                dto.setId(pending.getId());
+                dto.setFullName(pending.getFullName());
+                dto.setUsername(pending.getUsername());
+                dto.setEmail(pending.getEmail());
+                dto.setDepartment(pending.getDepartment());
+                dto.setRole(pending.getRole());
+                dto.setGender(pending.getGender());
+                dto.setJoinDate(pending.getJoinDate());
+                dto.setEmployeeId(pending.getEmployeeId());
+                dto.setStatus(pending.getStatus());
+                dto.setDisapproveReason(pending.getReason());
+                if (pending.getReportingTo() != null) {
+                    dto.setReportingToId(pending.getReportingTo().getId());
+                    dto.setReportingToName(pending.getReportingTo().getFullName());
+                }
+                return dto;
+            }).collect(Collectors.toList());
+            return ResponseEntity.ok(userDTOs);
+        } catch (Exception e) {
+            logger.error("Error fetching pending signups for Super Admin: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Collections.emptyList());
+        }
+    }
 }

@@ -4,11 +4,16 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
+import lombok.*;
 import java.time.LocalDate;
 import java.util.List;
 
 @Entity
 @Table(name = "users")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class User {
 
     @Id
@@ -80,62 +85,30 @@ public class User {
     @Column(name = "mother_name")
     private String motherName;
 
+    @Column(name = "emergency_contact_number")
+    private String emergencyContactNumber;
+
     @Column(name = "is_fresher", nullable = false)
     private Boolean isFresher = true;
 
     @Column(name = "profile_verification_status", nullable = false)
     private String profileVerificationStatus = "PENDING";
 
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public String getFullName() { return fullName; }
-    public void setFullName(String fullName) { this.fullName = fullName; }
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-    public String getDepartment() { return departmentEntity != null ? departmentEntity.getName() : department; }
-    public void setDepartment(String department) { this.department = department; }
-    public Department getDepartmentEntity() { return departmentEntity; }
+    // Custom getter and setter for department to handle departmentEntity
+    public String getDepartment() {
+        return departmentEntity != null ? departmentEntity.getName() : department;
+    }
+
+    public void setDepartment(String department) {
+        this.department = department;
+    }
+
+    public Department getDepartmentEntity() {
+        return departmentEntity;
+    }
+
     public void setDepartmentEntity(Department departmentEntity) {
         this.departmentEntity = departmentEntity;
         this.department = departmentEntity != null ? departmentEntity.getName() : null;
-    }
-    public LocalDate getJoinDate() { return joinDate; }
-    public void setJoinDate(LocalDate joinDate) { this.joinDate = joinDate; }
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
-    public String getGender() { return gender; }
-    public void setGender(String gender) { this.gender = gender; }
-    public LeaveBalance getLeaveBalance() { return leaveBalance; }
-    public void setLeaveBalance(LeaveBalance leaveBalance) { this.leaveBalance = leaveBalance; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public String getDisapproveReason() { return disapproveReason; }
-    public void setDisapproveReason(String disapproveReason) { this.disapproveReason = disapproveReason; }
-    public Double getLeaveWithoutPayment() { return leaveWithoutPayment; }
-    public void setLeaveWithoutPayment(Double leaveWithoutPayment) { this.leaveWithoutPayment = leaveWithoutPayment; }
-    public Double getHalfDayLwp() { return halfDayLwp; }
-    public void setHalfDayLwp(Double halfDayLwp) { this.halfDayLwp = halfDayLwp; }
-    public User getReportingTo() { return reportingTo; }
-    public void setReportingTo(User reportingTo) { this.reportingTo = reportingTo; }
-    public List<User> getSubordinates() { return subordinates; }
-    public void setSubordinates(List<User> subordinates) { this.subordinates = subordinates; }
-    public String getEmployeeId() { return employeeId; }
-    public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
-    public LocalDate getDob() { return dob; }
-    public void setDob(LocalDate dob) { this.dob = dob; }
-    public String getFatherName() { return fatherName; }
-    public void setFatherName(String fatherName) { this.fatherName = fatherName; }
-    public String getMotherName() { return motherName; }
-    public void setMotherName(String motherName) { this.motherName = motherName; }
-    public Boolean getIsFresher() { return isFresher; }
-    public void setIsFresher(Boolean isFresher) { this.isFresher = isFresher; }
-    public String getProfileVerificationStatus() { return profileVerificationStatus; }
-    public void setProfileVerificationStatus(String profileVerificationStatus) {
-        this.profileVerificationStatus = profileVerificationStatus;
     }
 }

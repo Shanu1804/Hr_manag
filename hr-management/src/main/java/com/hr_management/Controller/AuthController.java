@@ -1,6 +1,6 @@
 package com.hr_management.Controller;
 
-import com.hr_management.Entity.PendingSignup; // Add import
+import com.hr_management.Entity.PendingSignup;
 import com.hr_management.Entity.User;
 import com.hr_management.Repository.UserRepository;
 import com.hr_management.Util.JwtUtil;
@@ -64,10 +64,19 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@Valid @RequestBody UserDTO userDTO) {
         try {
-            userDTO.setStatus("PENDING");
-            PendingSignup pendingSignup = userService.signup(userDTO); // Update to PendingSignup
-            emailService.sendSignupConfirmationEmail(pendingSignup.getEmail(), pendingSignup.getFullName());
-            return ResponseEntity.ok(new SuccessResponse("Signup request submitted successfully. Awaiting HR approval."));
+            Object result = userService.signup(userDTO);
+            if (result instanceof User) {
+                return ResponseEntity.ok(new SuccessResponse("Account created successfully by Super Admin."));
+            } else if (result instanceof PendingSignup) {
+                PendingSignup pendingSignup = (PendingSignup) result;
+                String message = "HR".equalsIgnoreCase(pendingSignup.getRole()) && "Admin (Administration)".equals(pendingSignup.getDepartment())
+                        ? "HR signup request submitted successfully. Awaiting Super Admin approval."
+                        : "Signup request submitted successfully. Awaiting HR approval.";
+                return ResponseEntity.ok(new SuccessResponse(message));
+            } else {
+                // This case should ideally not be reached
+                throw new IllegalStateException("Unexpected result type from signup service");
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (Exception e) {
@@ -144,13 +153,13 @@ public class AuthController {
         return ResponseEntity.ok(new SuccessResponse("Password reset successfully"));
     }
 
+    // --- Static Inner Classes for Request/Response Payloads ---
+
     static class LoginRequest {
         @NotBlank
         private String username;
         @NotBlank
         private String password;
-
-        public LoginRequest() {}
 
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
@@ -162,7 +171,6 @@ public class AuthController {
         private String token;
         private String role;
 
-        public LoginResponse() {}
         public LoginResponse(String token, String role) {
             this.token = token;
             this.role = role;
@@ -179,8 +187,6 @@ public class AuthController {
         @Email
         private String email;
 
-        public ForgotPasswordRequest() {}
-
         public String getEmail() { return email; }
         public void setEmail(String email) { this.email = email; }
     }
@@ -193,8 +199,6 @@ public class AuthController {
         @NotBlank
         private String confirmPassword;
 
-        public ResetPasswordRequest() {}
-
         public String getToken() { return token; }
         public void setToken(String token) { this.token = token; }
         public String getPassword() { return password; }
@@ -206,7 +210,6 @@ public class AuthController {
     static class ErrorResponse {
         private String message;
 
-        public ErrorResponse() {}
         public ErrorResponse(String message) { this.message = message; }
 
         public String getMessage() { return message; }
@@ -216,7 +219,6 @@ public class AuthController {
     static class SuccessResponse {
         private String message;
 
-        public SuccessResponse() {}
         public SuccessResponse(String message) { this.message = message; }
 
         public String getMessage() { return message; }

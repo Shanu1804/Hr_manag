@@ -1,11 +1,11 @@
 package com.hr_management.service;
 
 import com.hr_management.Entity.Department;
-import com.hr_management.Entity.PendingSignup; // Add import
+import com.hr_management.Entity.PendingSignup;
 import com.hr_management.Entity.User;
 import com.hr_management.Entity.LeaveBalance;
 import com.hr_management.Repository.DepartmentRepository;
-import com.hr_management.Repository.PendingSignupRepository; // Add import
+import com.hr_management.Repository.PendingSignupRepository;
 import com.hr_management.Repository.UserRepository;
 import com.hr_management.Util.JwtUtil;
 import com.hr_management.dto.ReportingPersonDTO;
@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.springframework.security.core.Authentication; // Added import
 
 @Service
 public class UserService implements UserDetailsService {
@@ -38,7 +39,7 @@ public class UserService implements UserDetailsService {
     private DepartmentRepository departmentRepository;
 
     @Autowired
-    private PendingSignupRepository pendingSignupRepository; // Add repository
+    private PendingSignupRepository pendingSignupRepository;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -119,7 +120,7 @@ public class UserService implements UserDetailsService {
     private String normalizeDepartment(String deptName) {
         if (deptName == null) return null;
         if (deptName.toLowerCase().contains("admin")) {
-            return "Admin (Administration)"; // Match the exact database name
+            return "Admin (Administration)";
         }
         return deptName;
     }
@@ -163,7 +164,13 @@ public class UserService implements UserDetailsService {
         return dtos;
     }
 
-    public PendingSignup signup(UserDTO userDTO) {
+    /**
+     * MERGED METHOD: This method now handles two scenarios:
+     * 1. If a Super Admin creates an HR user, the user is created directly and a User object is returned.
+     * 2. For all other signups, a PendingSignup request is created and a PendingSignup object is returned.
+     * The return type is changed to Object to support both cases.
+     */
+    public Object signup(UserDTO userDTO) {
         logger.info("Processing signup for username: {}", userDTO.getUsername());
         // Check uniqueness in both users and pending_signups
         if (userRepository.existsByUsername(userDTO.getUsername()) || pendingSignupRepository.existsByUsername(userDTO.getUsername())) {
@@ -197,50 +204,124 @@ public class UserService implements UserDetailsService {
                     .orElseThrow(() -> new IllegalArgumentException("Department not found: " + normalizedDept));
         }
 
-        // Check if reporting person is required
-        boolean isReportingPersonRequired = !(
-                (normalizedDept != null && normalizedDept.equals("Admin (Administration)") && "HR".equalsIgnoreCase(userDTO.getRole())) ||
-                        "director".equalsIgnoreCase(userDTO.getRole())
-        );
+        // Check if the current user is a Super Admin
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+        boolean isAdminHR = normalizedDept != null && normalizedDept.equals("Admin (Administration)") && "HR".equalsIgnoreCase(userDTO.getRole());
+        boolean isReportingPersonRequired = !("director".equalsIgnoreCase(userDTO.getRole()) || isAdminHR);
 
         if (isReportingPersonRequired && userDTO.getReportingToId() == null) {
             throw new IllegalArgumentException("Reporting person is required for this role and department");
         }
 
-        PendingSignup pendingSignup = new PendingSignup();
-        pendingSignup.setFullName(userDTO.getFullName());
-        pendingSignup.setUsername(userDTO.getUsername());
-        pendingSignup.setPassword(passwordEncoder.encode(userDTO.getPassword()));
-        pendingSignup.setEmail(userDTO.getEmail());
-        pendingSignup.setDepartment(normalizedDept);
-        pendingSignup.setRole(userDTO.getRole().toUpperCase());
-        pendingSignup.setGender(userDTO.getGender());
-        pendingSignup.setJoinDate(userDTO.getJoinDate());
-        pendingSignup.setEmployeeId(userDTO.getEmployeeId());
-        pendingSignup.setStatus("PENDING");
+        // If the user is a Super Admin and creating an HR user, create directly
+        if (isSuperAdmin && isAdminHR) {
+            LeaveBalance leaveBalance = new LeaveBalance();
+            leaveBalance.setCasualLeaveUsed(0.0);
+            leaveBalance.setCasualLeaveRemaining("ASSISTANT_DIRECTOR".equalsIgnoreCase(userDTO.getRole()) ? 12.0 : 10.0);
+            leaveBalance.setEarnedLeaveUsedFirstHalf(0.0);
+            leaveBalance.setEarnedLeaveUsedSecondHalf(0.0);
+            leaveBalance.setMaternityLeaveUsed(0.0);
+            leaveBalance.setMaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Female") ? 182.0 : 0.0);
+            leaveBalance.setPaternityLeaveUsed(0.0);
+            leaveBalance.setPaternityLeaveRemaining(userDTO.getGender().equalsIgnoreCase("Male") ? 15.0 : 0.0);
 
-        if (isReportingPersonRequired && userDTO.getReportingToId() != null) {
-            User reportingTo = userRepository.findById(userDTO.getReportingToId())
-                    .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
-            pendingSignup.setReportingTo(reportingTo);
+            User user = new User();
+            user.setFullName(userDTO.getFullName());
+            user.setUsername(userDTO.getUsername());
+            user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
+            user.setEmail(userDTO.getEmail());
+            user.setDepartment(normalizedDept);
+            user.setDepartmentEntity(departmentEntity);
+            user.setRole(userDTO.getRole().toUpperCase());
+            user.setGender(userDTO.getGender());
+            user.setJoinDate(userDTO.getJoinDate());
+            user.setEmployeeId(userDTO.getEmployeeId());
+            user.setStatus("ACTIVE");
+            user.setLeaveBalance(leaveBalance);
+            user.setLeaveWithoutPayment(0.0);
+            user.setHalfDayLwp(0.0);
+
+            if (userDTO.getReportingToId() != null) {
+                User reportingTo = userRepository.findById(userDTO.getReportingToId())
+                        .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
+                user.setReportingTo(reportingTo);
+            } else {
+                user.setReportingTo(null);
+            }
+
+            User savedUser = userRepository.save(user);
+            logger.info("HR user created directly by Super Admin: {}", savedUser.getUsername());
+            emailService.sendSignupApprovalEmail(savedUser.getEmail(), savedUser.getFullName());
+            return savedUser;
         } else {
-            pendingSignup.setReportingTo(null);
-        }
+            // Save to pending_signups for all other users
+            if (isAdminHR) {
+                logger.info("HR signup request requires Super Admin approval for username: {}", userDTO.getUsername());
+            }
 
-        PendingSignup savedPendingSignup = pendingSignupRepository.save(pendingSignup);
-        logger.info("Signup request saved successfully: {}", savedPendingSignup.getUsername());
-        return savedPendingSignup;
+            PendingSignup pendingSignup = new PendingSignup();
+            pendingSignup.setFullName(userDTO.getFullName());
+            pendingSignup.setUsername(userDTO.getUsername());
+            pendingSignup.setPassword(passwordEncoder.encode(userDTO.getPassword()));
+            pendingSignup.setEmail(userDTO.getEmail());
+            pendingSignup.setDepartment(normalizedDept);
+            pendingSignup.setRole(userDTO.getRole().toUpperCase());
+            pendingSignup.setGender(userDTO.getGender());
+            pendingSignup.setJoinDate(userDTO.getJoinDate());
+            pendingSignup.setEmployeeId(userDTO.getEmployeeId());
+            pendingSignup.setStatus("PENDING");
+
+            if (isReportingPersonRequired && userDTO.getReportingToId() != null) {
+                User reportingTo = userRepository.findById(userDTO.getReportingToId())
+                        .orElseThrow(() -> new IllegalArgumentException("Reporting person not found with ID: " + userDTO.getReportingToId()));
+                pendingSignup.setReportingTo(reportingTo);
+            } else {
+                pendingSignup.setReportingTo(null);
+            }
+
+            PendingSignup savedPendingSignup = pendingSignupRepository.save(pendingSignup);
+            logger.info("Signup request saved successfully: {}", savedPendingSignup.getUsername());
+            emailService.sendSignupConfirmationEmail(savedPendingSignup.getEmail(), savedPendingSignup.getFullName());
+            return savedPendingSignup;
+        }
     }
 
-    public List<PendingSignup> getPendingUsers() { // Change return type to List<PendingSignup>
+    public List<PendingSignup> getPendingUsers() {
         logger.info("Fetching pending signup requests");
         return pendingSignupRepository.findByStatus("PENDING");
     }
+    public List<PendingSignup> getPendingHrSignups() {
+        logger.info("Fetching pending HR signup requests for Super Admin");
+        // Yeh line sirf un signups ko laayegi jinka role 'HR' hai
+        return pendingSignupRepository.findByRoleIgnoreCaseAndStatus("HR", "PENDING");
+    }
 
+    /**
+     * MERGED METHOD: Added authorization check.
+     * Only HR or Super Admin can approve users.
+     * Only Super Admin can approve an HR user.
+     */
     public void approveUser(Long userId) {
         logger.info("Approving signup request with id: {}", userId);
         PendingSignup pendingSignup = pendingSignupRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Signup request not found with ID: " + userId));
+
+        // Check if the current user is authorized to approve
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        boolean isHR = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_HR"));
+
+        if (pendingSignup.getRole().equalsIgnoreCase("HR") && pendingSignup.getDepartment().equals("Admin (Administration)") && !isSuperAdmin) {
+            throw new IllegalArgumentException("Only Super Admin can approve HR users");
+        }
+        if (!isSuperAdmin && !isHR) {
+            throw new IllegalArgumentException("Only HR or Super Admin can approve users");
+        }
 
         Department departmentEntity = null;
         if (!"DIRECTOR".equalsIgnoreCase(pendingSignup.getRole())) {
@@ -290,7 +371,7 @@ public class UserService implements UserDetailsService {
         emailService.sendSignupRejectionEmail(pendingSignup.getEmail(), pendingSignup.getFullName(), reason);
     }
 
-    public void deletePendingSignup(Long userId) { // New method for deletion
+    public void deletePendingSignup(Long userId) {
         logger.info("Deleting signup request with id: {}", userId);
         PendingSignup pendingSignup = pendingSignupRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Signup request not found with ID: " + userId));

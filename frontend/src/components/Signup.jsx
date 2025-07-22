@@ -13,8 +13,8 @@ export default function Signup() {
     role: '',
     gender: '',
     reportingToId: null,
-    employeeId: '', // Added employeeId
-    joinDate: '', // Added joinDate as string to match input type="date"
+    employeeId: '',
+    joinDate: '',
   });
   const [departments, setDepartments] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -27,12 +27,12 @@ export default function Signup() {
   const [notification, setNotification] = useState({ message: '', type: '' });
   const [focusedField, setFocusedField] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null); // To store the authenticated user's role
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
   const normalizeDepartment = (deptName) => {
     if (!deptName) return '';
-    // Keep the exact name from the backend to avoid mismatches
     return deptName; // No normalization needed since backend uses "Admin (Administration)"
   };
 
@@ -42,37 +42,41 @@ export default function Signup() {
   };
 
   useEffect(() => {
-    const fetchDepartments = async () => {
+    const fetchInitialData = async () => {
       try {
-        const response = await fetch('http://localhost:8081/api/departments', {
-          method: 'GET',
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          // Fetch current user to check if they are Super Admin
+          const userResponse = await fetch('http://localhost:8081/api/users/me', {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            setCurrentUser(userData);
+          } else if (userResponse.status === 401) {
+            localStorage.removeItem('authToken');
+            setNotification({ message: 'Session expired. Please log in again.', type: 'error' });
+          }
+        }
+
+        const deptResponse = await fetch('http://localhost:8081/api/departments', {
           headers: { 'Content-Type': 'application/json' },
         });
-        if (response.ok) {
-          const data = await response.json();
+        if (deptResponse.ok) {
+          const data = await deptResponse.json();
           setDepartments(data);
           if (data.length > 0) setFormData(prev => ({ ...prev, department: data[0].name }));
         } else {
-          const data = await response.json().catch(() => ({}));
+          const data = await deptResponse.json().catch(() => ({}));
           setNotification({ message: `Failed to load departments: ${data.message || 'Unknown error'}`, type: 'error' });
-          setDepartments([]);
         }
-      } catch (error) {
-        console.error('Error fetching departments:', error);
-        setNotification({ message: 'Error loading departments: Network or server issue.', type: 'error' });
-        setDepartments([]);
-      }
-    };
 
-    const fetchRoles = async () => {
-      try {
-        const response = await fetch('http://localhost:8081/api/roles', {
-          method: 'GET',
+        const rolesResponse = await fetch('http://localhost:8081/api/roles', {
           headers: { 'Content-Type': 'application/json' },
         });
-        if (response.ok) {
-          const data = await response.json();
-          const formattedRoles = data.map((role) => ({
+        if (rolesResponse.ok) {
+          const data = await rolesResponse.json();
+          const formattedRoles = data.map(role => ({
             id: role.id,
             name: role.name.toUpperCase(),
             displayName: role.name,
@@ -80,40 +84,27 @@ export default function Signup() {
           setRoles(formattedRoles);
           if (formattedRoles.length > 0) setFormData(prev => ({ ...prev, role: formattedRoles[0].name }));
         } else {
-          const data = await response.json().catch(() => ({}));
+          const data = await rolesResponse.json().catch(() => ({}));
           setNotification({ message: `Failed to load roles: ${data.message || 'Unknown error'}`, type: 'error' });
-          setRoles([]);
         }
-      } catch (error) {
-        console.error('Error fetching roles:', error);
-        setNotification({ message: 'Error loading roles: Network or server issue.', type: 'error' });
-        setRoles([]);
-      }
-    };
 
-    const fetchAllUsers = async () => {
-      try {
-        const response = await fetch('http://localhost:8081/api/auth/users', {
-          method: 'GET',
+        const usersResponse = await fetch('http://localhost:8081/api/auth/users', {
           headers: { 'Content-Type': 'application/json' },
         });
-        if (response.ok) {
-          const data = await response.json();
+        if (usersResponse.ok) {
+          const data = await usersResponse.json();
           setAllUsers(data);
           updateReportingPersons(data);
         } else {
-          const data = await response.json().catch(() => ({}));
+          const data = await usersResponse.json().catch(() => ({}));
           setNotification({ message: `Failed to load users: ${data.message || 'Unknown error'}`, type: 'error' });
         }
       } catch (error) {
-        console.error('Error fetching users:', error);
-        setNotification({ message: 'Error loading users: Network or server issue.', type: 'error' });
+        console.error('Error fetching initial data:', error);
+        setNotification({ message: 'Network or server error occurred.', type: 'error' });
       }
     };
-
-    fetchDepartments();
-    fetchRoles();
-    fetchAllUsers();
+    fetchInitialData();
   }, []);
 
   useEffect(() => {
@@ -134,7 +125,6 @@ export default function Signup() {
       setReportingPersons([]);
       return;
     }
-
     const filtered = users.filter(user =>
         user.role &&
         user.status === 'ACTIVE' &&
@@ -147,7 +137,7 @@ export default function Signup() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'department' ? normalizeDepartment(value) : value
+      [name]: name === 'department' ? normalizeDepartment(value) : value,
     }));
     if (name === 'reportingToId' && value) {
       setSearchTerm('');
@@ -168,8 +158,28 @@ export default function Signup() {
       return;
     }
 
-    if (!formData.fullName || !formData.username || !formData.email || !formData.role || !formData.gender || !formData.employeeId || !formData.joinDate) {
-      setNotification({ message: 'Please fill in all required fields, including Employee ID and Join Date.', type: 'error' });
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{8,}$/;
+    if (!passwordRegex.test(formData.password)) {
+      setNotification({
+        message: 'Password must have at least 1 uppercase letter, 1 lowercase letter, and 1 special character.',
+        type: 'error',
+      });
+      return;
+    }
+
+    if (
+        !formData.fullName ||
+        !formData.username ||
+        !formData.email ||
+        !formData.role ||
+        !formData.gender ||
+        !formData.employeeId ||
+        !formData.joinDate
+    ) {
+      setNotification({
+        message: 'Please fill in all required fields, including Employee ID and Join Date.',
+        type: 'error',
+      });
       return;
     }
 
@@ -185,36 +195,44 @@ export default function Signup() {
 
     setIsLoading(true);
 
+    const isAdminHR = formData.department === 'Admin (Administration)' && formData.role.toUpperCase() === 'HR';
+    const isSuperAdmin = currentUser?.role.toUpperCase() === 'SUPERADMIN';
+
     const userData = {
       fullName: formData.fullName,
       username: formData.username,
       password: formData.password,
       email: formData.email,
-      department: formData.role.toUpperCase() === 'DIRECTOR' ? null : formData.department, // Use raw department name
+      department: formData.role.toUpperCase() === 'DIRECTOR' ? null : formData.department,
       role: formData.role.toUpperCase(),
       gender: formData.gender,
       reportingToId: isReportingPersonRequired() ? formData.reportingToId : null,
-      status: 'PENDING',
       employeeId: formData.employeeId,
       joinDate: formData.joinDate,
     };
 
-    console.log('Submitting userData:', userData); // Debug log
+    console.log('Submitting userData:', userData);
 
     try {
+      const token = localStorage.getItem('authToken');
       const response = await fetch('http://localhost:8081/api/auth/signup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`, // Include token for authentication
+        },
         body: JSON.stringify(userData),
       });
 
       const responseData = await response.json();
 
       if (response.ok) {
-        setNotification({
-          message: 'Your signup request has been submitted and is awaiting HR approval. You will be notified once approved.',
-          type: 'success',
-        });
+        const statusMessage = isSuperAdmin && isAdminHR
+            ? 'Your HR account has been created successfully. You can now sign in.'
+            : isAdminHR
+                ? 'Your HR signup request has been submitted and is awaiting Super Admin approval.'
+                : 'Your signup request has been submitted and is awaiting HR approval.';
+        setNotification({ message: statusMessage, type: 'success' });
         setFormData({
           fullName: '',
           username: '',
@@ -411,14 +429,7 @@ export default function Signup() {
                         id="department"
                         name="department"
                         value={formData.department}
-                        onChange={(e) => {
-                          const selectedValue = e.target.value;
-                          console.log('Selected department:', selectedValue);
-                          setFormData(prev => {
-                            console.log('Setting formData.department to:', selectedValue);
-                            return { ...prev, department: selectedValue };
-                          });
-                        }}
+                        onChange={handleChange}
                         onFocus={() => setFocusedField('department')}
                         onBlur={() => setFocusedField('')}
                         disabled={formData.role.toUpperCase() === 'DIRECTOR'}
@@ -426,9 +437,8 @@ export default function Signup() {
                         required={formData.role.toUpperCase() !== 'DIRECTOR'}
                     >
                       <option value="">Select Department</option>
-                      {departments.map((dept) => (
+                      {departments.map(dept => (
                           <option key={dept.id || `dept-${dept.name}`} value={dept.name}>
-                            {console.log('Rendering option:', dept.name)}
                             {dept.name}
                           </option>
                       ))}
@@ -456,7 +466,7 @@ export default function Signup() {
                         required
                     >
                       <option value="">Select Role</option>
-                      {roles.map((role) => (
+                      {roles.map(role => (
                           <option key={role.id || `role-${role.name}`} value={role.name}>{role.displayName}</option>
                       ))}
                     </select>
@@ -482,15 +492,13 @@ export default function Signup() {
                                   type="text"
                                   value={searchTerm}
                                   onChange={handleSearchInput}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Escape') setIsDropdownOpen(false);
-                                  }}
+                                  onKeyDown={(e) => e.key === 'Escape' && setIsDropdownOpen(false)}
                                   placeholder="Type to search..."
                                   className="w-full p-2 border-b border-gray-300 focus:outline-none"
                                   autoFocus
                               />
                               {reportingPersons.length > 0 ? (
-                                  reportingPersons.map((person) => (
+                                  reportingPersons.map(person => (
                                       <div
                                           key={person.id}
                                           onClick={() => {
@@ -561,7 +569,7 @@ export default function Signup() {
                     <button
                         type="button"
                         onClick={togglePasswordVisibility}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-900 transition-colors duration-200"
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-900"
                     >
                       {passwordVisible ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
@@ -590,7 +598,7 @@ export default function Signup() {
                     <button
                         type="button"
                         onClick={toggleConfirmPasswordVisibility}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-900 transition-colors duration-200"
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-900"
                     >
                       {confirmPasswordVisible ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
@@ -621,9 +629,7 @@ export default function Signup() {
               <div className="mt-6 text-center">
                 <p className="text-sm text-gray-600">
                   Already have an account?{' '}
-                  <Link to="/" className="font-medium text-blue-900 hover:text-blue-800 transition-colors duration-200">
-                    Sign in
-                  </Link>
+                  <Link to="/" className="font-medium text-blue-900 hover:text-blue-800">Sign in</Link>
                 </p>
               </div>
             </div>
