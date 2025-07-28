@@ -110,7 +110,6 @@ export default function SuperAdminDash() {
                 setNotification({ message: `Failed to ${action} signup: ${errorData.message || 'Server error'}`, type: 'error' });
             }
         } catch (err) {
-            console.error('Error in handleApproveSignup:', err);
             setNotification({ message: 'Network error: Unable to process request', type: 'error' });
         }
     };

@@ -1,18 +1,21 @@
 package com.hr_management.Util;
 
-import io.jsonwebtoken.*;
-import org.springframework.security.core.userdetails.UserDetails;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
 public class JwtUtil {
@@ -24,17 +27,16 @@ public class JwtUtil {
     private Long expiration;
 
     private SecretKey getSigningKey() {
-        try {
-            byte[] keyBytes = Decoders.BASE64.decode(secret);
-            return Keys.hmacShaKeyFor(keyBytes);
-        } catch (Exception e) {
-            byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-            return Keys.hmacShaKeyFor(keyBytes);
-        }
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
@@ -50,12 +52,29 @@ public class JwtUtil {
                 .getBody();
     }
 
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    public String generateToken(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        // Extract roles and department from UserDetails if they are stored there
+        // This example assumes roles are available as authorities
+        String role = userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.joining(","));
+        claims.put("role", role);
+        return createToken(claims, userDetails.getUsername());
+    }
+
+    // Overloaded method for initial creation if UserDetails is not available yet
     public String generateToken(String username, String role, String department) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("role", "ROLE_" + role.toUpperCase()); // Store with ROLE_ prefix
+        claims.put("role", role); // Store role without "ROLE_" prefix
         claims.put("department", department);
         return createToken(claims, username);
     }
+
 
     private String createToken(Map<String, Object> claims, String subject) {
         return Jwts.builder()
@@ -67,29 +86,12 @@ public class JwtUtil {
                 .compact();
     }
 
-    public boolean isTokenValid(String token, String username) {
-        final String extractedUsername = extractUsername(token);
-        return (extractedUsername.equals(username) && !isTokenExpired(token));
-    }
-
-    private boolean isTokenExpired(String token) {
-        return extractAllClaims(token).getExpiration().before(new Date());
-    }
-
-    public String extractRole(String token) {
-        return extractAllClaims(token).get("role", String.class);
-    }
-
-    public String extractDepartment(String token) {
-        return extractAllClaims(token).get("department", String.class);
-    }
-
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
-
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+
+    public String extractRole(String token) {
+        return extractClaim(token, claims -> claims.get("role", String.class));
     }
 }

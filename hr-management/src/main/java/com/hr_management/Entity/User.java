@@ -93,7 +93,7 @@ public class User {
 
     @Column(name = "profile_verification_status", nullable = false)
     private String profileVerificationStatus = "PENDING";
-
+    
     // Custom getter and setter for department to handle departmentEntity
     public String getDepartment() {
         return departmentEntity != null ? departmentEntity.getName() : department;

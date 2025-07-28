@@ -36,4 +36,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByDepartmentAndReportingToId(@Param("department") String department, @Param("reportingToId") Long reportingToId);
 
     List<User> findByStatus(String status);
+
+    // New Method
+    List<User> findByProfileVerificationStatusIn(List<String> statuses);
 }

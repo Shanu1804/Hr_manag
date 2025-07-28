@@ -299,11 +299,6 @@ public class UserService implements UserDetailsService {
         return pendingSignupRepository.findByRoleIgnoreCaseAndStatus("HR", "PENDING");
     }
 
-    /**
-     * MERGED METHOD: Added authorization check.
-     * Only HR or Super Admin can approve users.
-     * Only Super Admin can approve an HR user.
-     */
     public void approveUser(Long userId) {
         logger.info("Approving signup request with id: {}", userId);
         PendingSignup pendingSignup = pendingSignupRepository.findById(userId)

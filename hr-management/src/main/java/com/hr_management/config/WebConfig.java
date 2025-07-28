@@ -19,16 +19,15 @@ public class WebConfig implements WebMvcConfigurer {
 
     private static final Logger logger = LoggerFactory.getLogger(WebConfig.class);
 
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        logger.info("Configuring CORS for /api/**");
-        registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:5173")
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(true);
-    }
-
+    //@Override
+    //public void addCorsMappings(CorsRegistry registry) {
+      //  logger.info("Configuring CORS for /api/**");
+        //registry.addMapping("/api/**")
+            //    .allowedOrigins("http://localhost:5173")
+          //      .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              //  .allowedHeaders("*")
+                //.allowCredentials(true);
+    //}
     @Override
     public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
         logger.info("Configuring Jackson message converter");

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Clock, CheckCircle, AlertCircle, Building, Menu, X, LogOut, Download, ChevronLeft, ChevronRight, FileText, UserPlus, Calendar } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertCircle, Building, Menu, X, LogOut, Download, ChevronLeft, ChevronRight, FileText, UserPlus, Calendar, UserCheck} from 'lucide-react';
 import ExcelJS from 'exceljs';
-
 export default function HRDashboard() {
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
@@ -33,6 +32,10 @@ export default function HRDashboard() {
   const [holidays, setHolidays] = useState([]);
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
   const [newHoliday, setNewHoliday] = useState({ name: '', date: '', type: 'CUSTOM' });
+  // New state for profile verification
+  const [profileVerificationList, setProfileVerificationList] = useState([]);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -69,7 +72,6 @@ export default function HRDashboard() {
           setError('Failed to fetch user data.');
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
         setError('Failed to fetch user data.');
       }
     };
@@ -103,7 +105,6 @@ export default function HRDashboard() {
 
         setDepartmentData(formattedData);
       } catch (error) {
-        console.error('Error fetching department data:', error);
         setError('Failed to load department data.');
         setDepartmentData([]);
       } finally {
@@ -135,7 +136,6 @@ export default function HRDashboard() {
           pendingLeaves: data.pendingLeaves || 0,
         });
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
         setError('Failed to load dashboard metrics.');
         setOverallData({
           totalEmployees: 0,
@@ -167,7 +167,6 @@ export default function HRDashboard() {
         const data = await response.json();
         setPendingSignups(data);
       } catch (error) {
-        console.error('Error fetching pending signups:', error);
         setError('Failed to load pending signup requests.');
         setPendingSignups([]);
       } finally {
@@ -186,8 +185,27 @@ export default function HRDashboard() {
           setError('Failed to fetch roles');
         }
       } catch (error) {
-        console.error('Error fetching roles:', error);
         setError('Failed to fetch roles.');
+      }
+    };
+
+    const fetchProfilesForVerification = async () => {
+      const token = localStorage.getItem('authToken');
+      try {
+        setIsLoading(true);
+        const response = await fetch('http://localhost:8081/api/hr/profiles/verification', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setProfileVerificationList(data);
+        } else {
+          setError('Failed to fetch profiles for verification.');
+        }
+      } catch (error) {
+        setError('An error occurred while fetching profiles.');
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -204,7 +222,6 @@ export default function HRDashboard() {
           setError('Failed to fetch holidays');
         }
       } catch (error) {
-        console.error('Error fetching holidays:', error);
         setError('Failed to fetch holidays.');
       } finally {
         setIsLoading(false);
@@ -218,6 +235,9 @@ export default function HRDashboard() {
     fetchHolidays();
     if (activeView === 'pending-signups') {
       fetchPendingSignups();
+    }
+    if (activeView === 'profile-verification') {
+      fetchProfilesForVerification();
     }
   }, [navigate, activeView]);
 
@@ -256,7 +276,6 @@ export default function HRDashboard() {
         setNotification({ message: `Failed to approve user: ${data.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
-      console.error('Error approving signup:', error);
       setNotification({ message: 'Failed to approve user.', type: 'error' });
     } finally {
       setIsLoading(false);
@@ -291,13 +310,11 @@ export default function HRDashboard() {
         setNotification({ message: `Failed to disapprove user: ${data.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
-      console.error('Error disapproving signup:', error);
       setNotification({ message: 'Failed to reject signup request.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
   };
-
   const handleAddRole = async (e) => {
     e.preventDefault();
     if (!newRole.trim()) {
@@ -330,7 +347,6 @@ export default function HRDashboard() {
         setNotification({ message: `Failed to add role: ${errorData.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
-      console.error('Error adding role:', error);
       setNotification({ message: 'Failed to add role.', type: 'error' });
     }
   };
@@ -376,7 +392,6 @@ export default function HRDashboard() {
         setNotification({ message: `Failed to add department: ${errorData.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
-      console.error('Error adding department:', error);
       setNotification({ message: 'Failed to add department.', type: 'error' });
     }
   };
@@ -412,7 +427,6 @@ export default function HRDashboard() {
         setNotification({ message: `Failed to add holiday: ${errorData.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
-      console.error('Error adding holiday:', error);
       setNotification({ message: 'Failed to add holiday.', type: 'error' });
     }
   };
@@ -435,7 +449,6 @@ export default function HRDashboard() {
         setNotification({ message: `Failed to delete holiday: ${errorData.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
-      console.error('Error deleting holiday:', error);
       setNotification({ message: 'Failed to delete holiday.', type: 'error' });
     } finally {
       setIsLoading(false);
@@ -467,7 +480,6 @@ export default function HRDashboard() {
           let currentDate = new Date(startDate);
           const end = new Date(endDate);
           if (isNaN(currentDate.getTime()) || isNaN(end.getTime())) {
-            console.error(`Invalid date range: ${startDate} to ${endDate}`);
             return dates;
           }
           while (currentDate <= end) {
@@ -480,7 +492,6 @@ export default function HRDashboard() {
 
         const mapLeaves = (applications, leaveType) => {
           if (!applications || !Array.isArray(applications)) {
-            console.warn(`No valid leave applications for ${employee.fullName}, type: ${leaveType}`);
             return [];
           }
           const typeMapping = {
@@ -541,7 +552,6 @@ export default function HRDashboard() {
 
       setEmployeesInDepartment(formattedEmployees);
     } catch (error) {
-      console.error('Error fetching employees:', error);
       setError(`Failed to load employee data: ${error.message}`);
       setEmployeesInDepartment([]);
     } finally {
@@ -621,7 +631,6 @@ export default function HRDashboard() {
       URL.revokeObjectURL(link.href);
       setNotification({ message: 'Leave report exported successfully', type: 'success' });
     } catch (error) {
-      console.error('Error exporting Excel:', error);
       setNotification({ message: 'Failed to export leave report.', type: 'error' });
     }
   };
@@ -636,7 +645,6 @@ export default function HRDashboard() {
 
   const handleDepartmentClick = (deptId) => {
     if (!deptId) {
-      console.warn('Invalid department ID:', deptId);
       setError('Invalid department selected.');
       return;
     }
@@ -655,12 +663,102 @@ export default function HRDashboard() {
     newMonth.setMonth(newMonth.getMonth() + increment);
     setCurrentMonth(newMonth);
   };
+  // Add these new functions inside your HRDashboard component
+  const handleViewProfile = async (userId) => {
+    const token = localStorage.getItem('authToken');
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:8081/api/hr/profiles/${userId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedProfile(data);
+      } else {
+        setNotification({ message: 'Failed to fetch profile details.', type: 'error' });
+      }
+    } catch (error) {
+      setNotification({ message: 'An error occurred while fetching profile details.', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleApproveProfile = async (userId) => {
+    const token = localStorage.getItem('authToken');
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:8081/api/hr/profiles/${userId}/approve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        setNotification({ message: 'Profile approved successfully!', type: 'success' });
+
+        setProfileVerificationList(prevList =>
+            prevList.map(profile =>
+                profile.userId === userId
+                    ? { ...profile, profileVerificationStatus: 'VERIFIED' }
+                    : profile
+            )
+        );
+
+        setSelectedProfile(null);
+
+      } else {
+        const data = await response.json();
+        setNotification({ message: `Approval failed: ${data.message || 'Unknown error'}`, type: 'error' });
+      }
+    } catch (error) {
+      setNotification({ message: 'An error occurred during approval.', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRejectProfile = async (userId) => {
+
+    if (window.confirm('Are you sure you want to reject this profile? This action cannot be undone.')) {
+      const token = localStorage.getItem('authToken');
+      try {
+        setIsLoading(true);
+        const response = await fetch(`http://localhost:8081/api/hr/profiles/${userId}/reject`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          setNotification({ message: 'Profile rejected successfully.', type: 'success' });
+          // Update the list to show the 'REJECTED' status
+          setProfileVerificationList(prevList =>
+              prevList.map(profile =>
+                  profile.userId === userId
+                      ? { ...profile, profileVerificationStatus: 'REJECTED' }
+                      : profile
+              )
+          );
+
+          setSelectedProfile(null);
+        } else {
+          const data = await response.json();
+          setNotification({ message: `Rejection failed: ${data.message || 'Unknown error'}`, type: 'error' });
+        }
+      } catch (error) {
+        setNotification({ message: 'An error occurred during rejection.', type: 'error' });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
 
   const backToOverview = () => {
     setSelectedDepartment(null);
     setSelectedEmployee(null);
     setEmployeesInDepartment([]);
-    setActiveView('department-overview');
+    setActiveView('dashboard');
   };
 
   const backToDepartment = () => {
@@ -726,7 +824,168 @@ export default function HRDashboard() {
 
     return calendarDays;
   };
+  // Add these two new functions inside your HRDashboard component
 
+  const renderProfileDetailView = () => {
+    if (!selectedProfile) return null;
+
+    const { userDetails, documents } = selectedProfile;
+
+    return (
+        <div className="space-y-6">
+          <div className="flex items-center space-x-3">
+            <button
+                onClick={() => setSelectedProfile(null)}
+                className="p-2 rounded-full hover:bg-gray-100 transition duration-200"
+                aria-label="Back to list"
+            >
+              <ChevronLeft size={20} className="text-gray-700" />
+            </button>
+            <h2 className="text-2xl font-semibold text-gray-900">{selectedProfile.fullName}'s Profile</h2>
+          </div>
+
+          {/* Profile Details Card */}
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Personal Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div><span className="font-medium text-gray-600">Full Name:</span> {selectedProfile.fullName}</div>
+              <div><span className="font-medium text-gray-600">Employee ID:</span> {selectedProfile.employeeId}</div>
+              <div><span className="font-medium text-gray-600">Email:</span> {selectedProfile.email}</div>
+              <div><span className="font-medium text-gray-600">Date of Birth:</span> {selectedProfile.dob}</div>
+              <div><span className="font-medium text-gray-600">Father's Name:</span> {selectedProfile.fatherName}</div>
+              <div><span className="font-medium text-gray-600">Mother's Name:</span> {selectedProfile.motherName}</div>
+              <div><span className="font-medium text-gray-600">Emergency Contact:</span> {selectedProfile.emergencyContactNumber}</div>
+              <div><span className="font-medium text-gray-600">Is Fresher?:</span> {selectedProfile.isFresher ? 'Yes' : 'No'}</div>
+            </div>
+          </div>
+
+          {/* Documents Card */}
+          {/* Documents Card */}
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Uploaded Documents</h3>
+            <ul className="space-y-2">
+              {selectedProfile.documents.map((doc, index) => (
+                  <li key={index} className="flex justify-between items-center p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 border border-transparent hover:border-gray-200">
+                    <div className="flex items-center space-x-3">
+                      <FileText size={18} className="text-gray-500" />
+                      <span className="text-sm font-medium text-gray-800 capitalize">
+                      {doc.customDocumentName || doc.documentType.replace(/_/g, ' ')}
+                    </span>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <button
+                          onClick={() => handleViewDocument(doc.fileName)}
+                          className="text-sm font-medium text-blue-600 hover:underline focus:outline-none"
+                          title="View Document"
+                      >
+                        View
+                      </button>
+                      <button
+                          onClick={() => handleDownloadDocument(doc.fileName)}
+                          className="p-2 rounded-full text-gray-600 hover:bg-blue-100 hover:text-blue-700 transition-colors duration-200 focus:outline-none"
+                          title={`Download ${doc.customDocumentName || doc.documentType}`}
+                          aria-label="Download document"
+                      >
+                        <Download size={18} />
+                      </button>
+                    </div>
+                  </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Actions */}
+          {selectedProfile.profileVerificationStatus === 'SUBMITTED' && (
+              <div className="flex justify-end space-x-4">
+                <button
+                    onClick={() => handleRejectProfile(selectedProfile.userId)}
+                    className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition duration-200"
+                >
+                  Reject
+                </button>
+                <button
+                    onClick={() => handleApproveProfile(selectedProfile.userId)}
+                    className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition duration-200"
+                >
+                  Approve
+                </button>
+              </div>
+          )}
+        </div>
+    );
+  };
+
+  const renderProfileVerificationList = () => {
+    return (
+        <div className="space-y-6">
+          <h2 className="text-2xl font-semibold text-gray-900">Profile Verification Requests</h2>
+          {profileVerificationList.length === 0 && !isLoading ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                <p className="text-sm text-gray-700">No profiles are currently pending verification.</p>
+              </div>
+          ) : (
+              <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Employee ID</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Employee Name</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                    {profileVerificationList.map(profile => (
+                        <tr key={profile.userId} className="hover:bg-gray-50 transition duration-150">
+                          <td className="px-6 py-4 whitespace-nowrap text-gray-900">{profile.employeeId}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-gray-900">{profile.fullName}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                profile.profileVerificationStatus === 'VERIFIED' ? 'bg-green-100 text-green-800' :
+                                                    profile.profileVerificationStatus === 'SUBMITTED' ? 'bg-yellow-100 text-yellow-800' :
+                                                        'bg-red-100 text-red-800'
+                                            }`}>
+                                                {profile.profileVerificationStatus}
+                                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                                onClick={() => handleViewProfile(profile.userId)}
+                                className="text-blue-600 hover:text-blue-800 font-medium transition duration-200"
+                            >
+                              View Form
+                            </button>
+                          </td>
+                        </tr>
+                    ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+          )}
+        </div>
+    );
+  };
+  const handleViewDocument = async (fileName) => {
+    const token = localStorage.getItem('authToken');
+    try {
+      const response = await fetch(`http://localhost:8081/api/documents/view/${fileName}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not download file.');
+      }
+
+      const blob = await response.blob();
+      const fileUrl = window.URL.createObjectURL(blob);
+      window.open(fileUrl, '_blank'); // Open in a new tab
+
+    } catch (error) {
+      setNotification({ message: 'Failed to open document.', type: 'error' });
+    }
+  };
   const renderLeaveCalendar = () => {
     const calendarDays = generateCalendarDays();
     const monthName = currentMonth.toLocaleString('default', { month: 'long' });
@@ -890,6 +1149,35 @@ export default function HRDashboard() {
         </div>
     );
   };
+  const handleDownloadDocument = async (fileName) => {
+    const token = localStorage.getItem('authToken');
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:8081/api/documents/view/${fileName}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not download file.');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName; // This prompts the user to save the file
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setNotification({ message: 'Document downloaded successfully.', type: 'success' });
+
+    } catch (error){
+    setNotification({ message: 'Failed to download document.', type: 'error' });
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const renderPendingSignups = () => {
     const handleDeleteSignup = async (userId) => {
@@ -912,7 +1200,6 @@ export default function HRDashboard() {
           setNotification({ message: `Failed to delete signup: ${data.message || 'Unknown error'}`, type: 'error' });
         }
       } catch (error) {
-        console.error('Error deleting signup:', error);
         setNotification({ message: 'Failed to delete signup request.', type: 'error' });
       } finally {
         setIsLoading(false);
@@ -1265,7 +1552,9 @@ export default function HRDashboard() {
           </div>
       );
     }
-
+    if (selectedProfile) {
+      return renderProfileDetailView();
+    }
     if (selectedEmployee) {
       return renderEmployeeView();
     }
@@ -1280,6 +1569,9 @@ export default function HRDashboard() {
     }
     if (activeView === 'holidays') {
       return renderHolidayView();
+    }
+    if (activeView === 'profile-verification') {
+      return renderProfileVerificationList();
     }
     return renderDashboardView();
   };
@@ -1330,6 +1622,15 @@ export default function HRDashboard() {
             >
               <FileText size={20} className="mr-3" />
               Pending Signup Requests
+            </button>
+            <button
+                onClick={() => setActiveView('profile-verification')}
+                className={`flex items-center w-full p-3 text-left rounded-lg transition duration-200 ${
+                    activeView === 'profile-verification' ? 'bg-blue-800' : 'hover:bg-blue-800'
+                }`}
+            >
+              <UserCheck size={20} className="mr-3" />
+              Profile Verification
             </button>
             <button
                 onClick={() => setActiveView('holidays')}

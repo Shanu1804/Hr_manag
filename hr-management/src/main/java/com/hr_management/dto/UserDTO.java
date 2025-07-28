@@ -4,37 +4,38 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
+import java.util.List; // <-- Make sure this import is present
 
 public class UserDTO {
-    private Long id; // Add id field
-    @NotBlank
+    // --- All your existing fields are fine ---
+    private Long id;
     private String fullName;
-    @NotBlank
     private String username;
-    @NotBlank
     private String password;
-    @NotBlank
-    @Email
     private String email;
-    private String department; // Allow null for Directors
-    @NotBlank
+    private String department;
     private String role;
-    @NotBlank
     private String gender;
     private Long reportingToId;
-    private String reportingToName; // Add reportingToName field
+    private String reportingToName;
     private String status;
     private String disapproveReason;
-    @NotNull(message = "Join date is required")
     private LocalDate joinDate;
-    @NotBlank(message = "Employee ID is required")
     private String employeeId;
+    private String profileVerificationStatus;
 
+    // --- ADD THESE NEW FIELDS ---
+    private LocalDate dob;
+    private String fatherName;
+    private String motherName;
+    private String emergencyContactNumber;
+    private Boolean isFresher;
+    private List<DocumentDTO> documents; // This will hold all uploaded documents
+
+    // --- All your existing getters and setters are fine ---
     public UserDTO() {}
-
     public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; } // Add this method
-
+    public void setId(Long id) { this.id = id; }
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
     public String getUsername() { return username; }
@@ -52,7 +53,7 @@ public class UserDTO {
     public Long getReportingToId() { return reportingToId; }
     public void setReportingToId(Long reportingToId) { this.reportingToId = reportingToId; }
     public String getReportingToName() { return reportingToName; }
-    public void setReportingToName(String reportingToName) { this.reportingToName = reportingToName; } // Add this method
+    public void setReportingToName(String reportingToName) { this.reportingToName = reportingToName; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getDisapproveReason() { return disapproveReason; }
@@ -61,69 +62,20 @@ public class UserDTO {
     public void setJoinDate(LocalDate joinDate) { this.joinDate = joinDate; }
     public String getEmployeeId() { return employeeId; }
     public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
-}
+    public String getProfileVerificationStatus() { return profileVerificationStatus; }
+    public void setProfileVerificationStatus(String profileVerificationStatus) { this.profileVerificationStatus = profileVerificationStatus; }
 
-class LoginResponse {
-    private String token;
-    private String role;
-
-    public LoginResponse() {}
-    public LoginResponse(String token, String role) {
-        this.token = token;
-        this.role = role;
-    }
-
-    public String getToken() { return token; }
-    public void setToken(String token) { this.token = token; }
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
-}
-
-class ForgotPasswordRequest {
-    @NotBlank
-    @Email
-    private String email;
-
-    public ForgotPasswordRequest() {}
-
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-}
-
-class ResetPasswordRequest {
-    @NotBlank
-    private String token;
-    @NotBlank
-    private String password;
-    @NotBlank
-    private String confirmPassword;
-
-    public ResetPasswordRequest() {}
-
-    public String getToken() { return token; }
-    public void setToken(String token) { this.token = token; }
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-    public String getConfirmPassword() { return confirmPassword; }
-    public void setConfirmPassword(String confirmPassword) { this.confirmPassword = confirmPassword; }
-}
-
-class ErrorResponse {
-    private String message;
-
-    public ErrorResponse() {}
-    public ErrorResponse(String message) { this.message = message; }
-
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-}
-
-class SuccessResponse {
-    private String message;
-
-    public SuccessResponse() {}
-    public SuccessResponse(String message) { this.message = message; }
-
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
+    // --- ADD GETTERS AND SETTERS FOR THE NEW FIELDS ---
+    public LocalDate getDob() { return dob; }
+    public void setDob(LocalDate dob) { this.dob = dob; }
+    public String getFatherName() { return fatherName; }
+    public void setFatherName(String fatherName) { this.fatherName = fatherName; }
+    public String getMotherName() { return motherName; }
+    public void setMotherName(String motherName) { this.motherName = motherName; }
+    public String getEmergencyContactNumber() { return emergencyContactNumber; }
+    public void setEmergencyContactNumber(String emergencyContactNumber) { this.emergencyContactNumber = emergencyContactNumber; }
+    public Boolean getIsFresher() { return isFresher; }
+    public void setIsFresher(Boolean isFresher) { this.isFresher = isFresher; }
+    public List<DocumentDTO> getDocuments() { return documents; }
+    public void setDocuments(List<DocumentDTO> documents) { this.documents = documents; }
 }

@@ -1,11 +1,16 @@
 package com.hr_management.Controller;
 
 import com.hr_management.Entity.Department;
-import com.hr_management.Entity.PendingSignup; // Add import
+import com.hr_management.Entity.PendingSignup;
 import com.hr_management.Entity.User;
+import com.hr_management.Repository.DocumentRepository;
 import com.hr_management.service.DepartmentService;
 import com.hr_management.service.UserService;
 import com.hr_management.dto.UserDTO;
+// --- Add these required imports ---
+import com.hr_management.Entity.Document;
+import com.hr_management.dto.DocumentDTO;
+// ---
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,16 +35,20 @@ public class UserController {
 
     @Autowired
     private UserService userService;
-
+    @Autowired
+    private DocumentRepository documentRepository;
     @Autowired
     private DepartmentService departmentService;
 
+    // --- The method below is the one we are fixing ---
     @GetMapping("/users/me")
     public ResponseEntity<?> getCurrentUser() {
         logger.info("Received request for /api/users/me");
         try {
             User user = userService.getCurrentUser();
             UserDTO userDTO = new UserDTO();
+
+            // Set existing fields
             userDTO.setId(user.getId());
             userDTO.setFullName(user.getFullName());
             userDTO.setUsername(user.getUsername());
@@ -54,11 +63,33 @@ public class UserController {
             if (user.getReportingTo() != null) {
                 userDTO.setReportingToId(user.getReportingTo().getId());
                 userDTO.setReportingToName(user.getReportingTo().getFullName());
-                logger.debug("ReportingTo found: ID={}, FullName={}", user.getReportingTo().getId(), user.getReportingTo().getFullName());
-            } else {
-                logger.warn("ReportingTo is null for user: {}", user.getUsername());
             }
-            logger.debug("Returning user DTO: {}", userDTO);
+
+            // --- START: ADDED CODE TO FIX THE PROBLEM ---
+
+            // 1. Populate the missing profile fields from the User entity
+            userDTO.setProfileVerificationStatus(user.getProfileVerificationStatus());
+            userDTO.setDob(user.getDob());
+            userDTO.setFatherName(user.getFatherName());
+            userDTO.setMotherName(user.getMotherName());
+            userDTO.setEmergencyContactNumber(user.getEmergencyContactNumber());
+            userDTO.setIsFresher(user.getIsFresher());
+
+            // 2. Fetch and populate the user's documents
+            List<Document> userDocuments = documentRepository.findByUserId(user.getId());
+            List<DocumentDTO> documentDTOs = userDocuments.stream()
+                    .map(doc -> new DocumentDTO(
+                            doc.getDocumentType(),
+                            doc.getCustomDocumentName(),
+                            java.nio.file.Paths.get(doc.getFilePath()).getFileName().toString(),
+                            doc.getIsPreviousCompany()
+                    ))
+                    .collect(Collectors.toList());
+            userDTO.setDocuments(documentDTOs);
+
+            // --- END: ADDED CODE ---
+
+            logger.debug("Returning complete user DTO: {}", userDTO);
             return ResponseEntity.ok(userDTO);
         } catch (Exception e) {
             logger.error("Error fetching current user: {}", e.getMessage(), e);
@@ -66,6 +97,8 @@ public class UserController {
                     .body(Collections.singletonMap("message", "Failed to fetch user: " + e.getMessage()));
         }
     }
+
+    // --- The rest of your file remains the same ---
 
     @GetMapping("/departments")
     public ResponseEntity<List<Department>> getAllDepartments() {
@@ -241,6 +274,7 @@ public class UserController {
             return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
         }
     }
+
     @PostMapping("/superadmin/approve-hr-signup/{userId}")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> approveHrSignup(@PathVariable Long userId) {
@@ -277,12 +311,12 @@ public class UserController {
             return ResponseEntity.status(500).body(new AuthController.ErrorResponse("An error occurred: " + e.getMessage()));
         }
     }
+
     @GetMapping("/superadmin/pending-signups")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<List<UserDTO>> getSuperAdminPendingSignups() {
         logger.info("Fetching pending signups for Super Admin");
         try {
-            // AB YEH SIRF HR KI REQUESTS LAANE WALA SAHI METHOD CALL KAREGA
             List<PendingSignup> pendingSignups = userService.getPendingHrSignups();
 
             List<UserDTO> userDTOs = pendingSignups.stream().map(pending -> {

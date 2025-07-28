@@ -100,7 +100,6 @@ export default function Signup() {
           setNotification({ message: `Failed to load users: ${data.message || 'Unknown error'}`, type: 'error' });
         }
       } catch (error) {
-        console.error('Error fetching initial data:', error);
         setNotification({ message: 'Network or server error occurred.', type: 'error' });
       }
     };
@@ -211,7 +210,6 @@ export default function Signup() {
       joinDate: formData.joinDate,
     };
 
-    console.log('Submitting userData:', userData);
 
     try {
       const token = localStorage.getItem('authToken');
@@ -253,7 +251,6 @@ export default function Signup() {
         setNotification({ message: `Signup failed: ${responseData.message || 'Unknown error'}`, type: 'error' });
       }
     } catch (error) {
-      console.error('Signup error:', error);
       setNotification({ message: 'An error occurred during signup. Please try again.', type: 'error' });
     } finally {
       setIsLoading(false);

@@ -103,6 +103,49 @@ export default function GenericDashboard() {
           data.reportingTo = data.reportingToName ? {fullName: data.reportingToName} : {fullName: null};
           setUserData(data);
 
+          if (data.profileVerificationStatus) {
+            const cleanStatus = data.profileVerificationStatus.trim();
+            setProfileVerificationStatus(cleanStatus);
+
+            // 2. If verified, populate the form state so the details can be displayed
+            // In GenericDashboard.js -> inside the useEffect -> fetchUserData -> if(response.ok)
+// Find this block...
+            if (cleanStatus === 'VERIFIED') {
+
+              // --- REPLACE THE OLD LOGIC WITH THIS NEW LOGIC ---
+
+              const allDocsFromServer = data.documents || [];
+              const standardDocs = {};
+              const prevCompanyDocs = {};
+              const additionalDocs = [];
+
+              allDocsFromServer.forEach(doc => {
+                // The frontend expects an object with a 'name' property for display
+                const docInfo = { name: doc.fileName };
+
+                if (doc.isPreviousCompany) {
+                  prevCompanyDocs[doc.documentType] = docInfo;
+                } else if (doc.documentType === 'additional_document') {
+                  // Use customDocumentName for the display name
+                  additionalDocs.push({ name: doc.customDocumentName, file: docInfo });
+                } else {
+                  standardDocs[doc.documentType] = docInfo;
+                }
+              });
+
+              setProfileFormData(prev => ({
+                ...prev,
+                dob: data.dob ? data.dob.split('T')[0] : '', // Format date to yyyy-mm-dd
+                fatherName: data.fatherName || '',
+                motherName: data.motherName || '',
+                emergencyContactNumber: data.emergencyContactNumber || '',
+                isFresher: data.isFresher !== undefined ? data.isFresher : true,
+                documents: standardDocs,
+                previousCompanyDocuments: prevCompanyDocs,
+                additionalDocuments: additionalDocs,
+              }));
+            }
+          }
           // Fetch subordinates
           let subordinatesData = [];
           const subordinatesResponse = await fetch('http://localhost:8081/api/users/subordinates', {
@@ -149,7 +192,6 @@ export default function GenericDashboard() {
             const holidaysData = await holidaysResponse.json();
             setHolidays(holidaysData.map(h => h.date));
           } else {
-            console.error('Failed to fetch holidays:', holidaysResponse.status);
             setHolidays([]);
           }
         } else if (response.status === 401) {
@@ -160,7 +202,6 @@ export default function GenericDashboard() {
           setError('Failed to fetch user data.');
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
         setError('An error occurred. Please try again.');
       } finally {
         setIsLoading(false);
@@ -207,7 +248,6 @@ export default function GenericDashboard() {
           setLeaveApplications(applicationsData);
         }
       } catch (err) {
-        console.error('Error fetching leave data:', err);
         setError('An error occurred while fetching leave data.');
       } finally {
         setIsLoading(false);
@@ -473,7 +513,6 @@ export default function GenericDashboard() {
           return;
         }
       } catch (err) {
-        console.error('Error fetching available CL:', err);
         setError('An error occurred while checking CL balance.');
         setIsSubmitting(false);
         return;
@@ -589,7 +628,6 @@ export default function GenericDashboard() {
             setLeaveApplications(applicationsData);
           }
         } catch (err) {
-          console.error('Error refreshing leave data:', err);
           setError('An error occurred while refreshing leave data.');
         }
       } else {
@@ -609,7 +647,6 @@ export default function GenericDashboard() {
         }
       }
     } catch (err) {
-      console.error('Error submitting leave:', err);
       setError('An error occurred while submitting the application');
     } finally {
       setIsSubmitting(false);
@@ -665,7 +702,6 @@ export default function GenericDashboard() {
         }
       }
     } catch (err) {
-      console.error(`Error ${action}ing leave:`, err);
       setError(`An error occurred while ${action}ing the leave`);
     } finally {
       setIsSubmitting(false);
@@ -1046,7 +1082,6 @@ export default function GenericDashboard() {
         }
       }
     } catch (err) {
-      console.error('Error submitting profile:', err);
       setError('An error occurred while submitting the profile');
     } finally {
       setIsSubmitting(false);
@@ -1139,43 +1174,9 @@ export default function GenericDashboard() {
                       <p className="text-lg font-semibold text-gray-900">{profileFormData.isFresher ? 'Fresher' : 'Experienced'}</p>
                     </div>
                   </div>
-                  <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-4">Uploaded Documents</h3>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {documentTypes.map((docType) => (
-                          <div key={docType}>
-                            <p className="text-sm font-medium text-gray-600">{docType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
-                            <p className="text-lg font-semibold text-gray-900">{profileFormData.documents[docType] ? profileFormData.documents[docType].name : 'N/A'}</p>
-                          </div>
-                      ))}
-                    </div>
-                  </div>
-                  {!profileFormData.isFresher && (
-                      <div className="mt-6">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">Previous Company Documents</h3>
-                        <div className="grid md:grid-cols-2 gap-4">
-                          {previousCompanyDocumentTypes.map((docType) => (
-                              <div key={docType}>
-                                <p className="text-sm font-medium text-gray-600">{docType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
-                                <p className="text-lg font-semibold text-gray-900">{profileFormData.previousCompanyDocuments[docType] ? profileFormData.previousCompanyDocuments[docType].name : 'N/A'}</p>
-                              </div>
-                          ))}
-                        </div>
-                      </div>
-                  )}
-                  {profileFormData.additionalDocuments.length > 0 && (
-                      <div className="mt-6">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">Additional Documents</h3>
-                        <div className="grid md:grid-cols-2 gap-4">
-                          {profileFormData.additionalDocuments.map((doc, index) => (
-                              <div key={index}>
-                                <p className="text-sm font-medium text-gray-600">{doc.name || `Additional Document ${index + 1}`}</p>
-                                <p className="text-lg font-semibold text-gray-900">{doc.file ? doc.file.name : 'N/A'}</p>
-                              </div>
-                          ))}
-                        </div>
-                      </div>
-                  )}
+
+                  {/* --- DOCUMENT SECTIONS REMOVED AS REQUESTED --- */}
+
                   <div className="text-center py-6">
                     <p className="text-green-600 text-lg font-medium">Your profile has been verified by HR.</p>
                     <p className="text-gray-600">All submitted details and documents have been approved.</p>
@@ -1898,7 +1899,6 @@ export default function GenericDashboard() {
         }
       }
     } catch (err) {
-      console.error('Error cancelling leave:', err);
       setError('An error occurred while cancelling the leave');
     } finally {
       setIsSubmitting(false);

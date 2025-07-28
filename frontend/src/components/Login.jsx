@@ -36,8 +36,7 @@ export default function Login() {
     const togglePasswordVisibility = () => setPasswordVisible(!passwordVisible);
 
     const handleLogin = async (e) => {
-        e.preventDefault(); // Prevent page reload
-        console.log('Starting login process');
+        e.preventDefault();
 
         if (!formData.username || !formData.password) {
             setError('Username and password are required');
@@ -52,10 +51,10 @@ export default function Login() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData),
             });
-            console.log('Fetch completed');
+
 
             const data = await response.json();
-            console.log('Login response:', data);
+
 
             if (response.ok) {
                 localStorage.setItem('authToken', data.token);
@@ -69,7 +68,6 @@ export default function Login() {
 
                 setSuccessMessage('Login successful!');
                 const userRole = (data.role || '').toUpperCase();
-                console.log('Processing role:', userRole);
 
                 if (!userRole) {
                     setError('No role provided by server');
@@ -80,19 +78,18 @@ export default function Login() {
                 switch (userRole) {
                     case 'HR':
                         navigate('/hr-dashboard', { replace: true });
-                        console.log('Navigating to /hr-dashboard');
                         break;
                     case 'DIRECTOR':
                         navigate('/director-dashboard', { replace: true });
-                        console.log('Navigating to /director-dashboard');
+
                         break;
                     case 'SUPER_ADMIN':
                         navigate('/superadmin-dashboard', { replace: true });
-                        console.log('Navigating to /superadmin-dashboard');
+
                         break;
                     default:
                         navigate('/dashboard', { replace: true });
-                        console.log('Navigating to /dashboard');
+
                         break;
                 }
                 setIsLoading(false);
@@ -101,7 +98,6 @@ export default function Login() {
                 setIsLoading(false);
             }
         } catch (err) {
-            console.error('Login error:', err);
             setError('An error occurred. Please try again later.');
             setIsLoading(false);
         }

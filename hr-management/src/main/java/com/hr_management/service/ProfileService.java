@@ -4,7 +4,10 @@ import com.hr_management.Entity.Document;
 import com.hr_management.Entity.User;
 import com.hr_management.Repository.DocumentRepository;
 import com.hr_management.Repository.UserRepository;
+import com.hr_management.dto.DocumentDTO;
 import com.hr_management.dto.ProfileDTO;
+import com.hr_management.dto.ProfileReviewDTO;
+import com.hr_management.dto.UserProfileDetailDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +24,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class ProfileService {
@@ -33,7 +37,6 @@ public class ProfileService {
 
     private final Path rootLocation = Paths.get("uploads");
 
-    // These lists should match the frontend exactly
     private final List<String> documentTypes = Arrays.asList(
             "aadhaar", "pan", "marksheets", "offer_letter", "joining_form",
             "isa_form", "affidavit", "police_verification", "passbook_copy"
@@ -60,8 +63,6 @@ public class ProfileService {
             throw new IllegalStateException("Profile has already been submitted or verified and cannot be changed.");
         }
 
-        // --- 1. Update User Entity Fields ---
-        // IMPORTANT: Your User.java entity MUST have these fields and their setters.
         user.setDob(LocalDate.parse(profileDTO.getDob()));
         user.setFatherName(profileDTO.getFatherName());
         user.setMotherName(profileDTO.getMotherName());
@@ -69,18 +70,14 @@ public class ProfileService {
         user.setIsFresher(profileDTO.getIsFresher());
         user.setProfileVerificationStatus("SUBMITTED");
 
-        // --- 2. Process and Save All Files ---
-        // Save Photo
         saveFileAndCreateDocument(user, fileParts.get("photo"), "photo", false, null);
 
-        // Save Standard Documents
         for (String docType : documentTypes) {
             if (fileParts.containsKey(docType)) {
                 saveFileAndCreateDocument(user, fileParts.get(docType), docType, false, null);
             }
         }
 
-        // Save Previous Company Documents (if not a fresher)
         if (!profileDTO.getIsFresher()) {
             for (String docType : previousCompanyDocumentTypes) {
                 if (fileParts.containsKey(docType)) {
@@ -89,7 +86,6 @@ public class ProfileService {
             }
         }
 
-        // Save Additional Documents
         for (Map.Entry<String, String> entry : textParts.entrySet()) {
             if (entry.getKey().startsWith("additionalDocument") && entry.getKey().endsWith("_name")) {
                 String customDocName = entry.getValue();
@@ -101,14 +97,11 @@ public class ProfileService {
             }
         }
 
-        // --- 3. Save the updated User object ---
         userRepository.save(user);
     }
 
     private void saveFileAndCreateDocument(User user, MultipartFile file, String docType, boolean isPreviousCompany, String customDocName) {
         if (file == null || file.isEmpty()) {
-            // Depending on requirements, you might throw an exception or just return
-            // For now, we'll just return, assuming not all documents are mandatory
             return;
         }
 
@@ -133,5 +126,78 @@ public class ProfileService {
         } catch (IOException e) {
             throw new RuntimeException("Failed to store file " + filename, e);
         }
+    }
+
+    // --- NEW METHODS FOR HR VERIFICATION ---
+
+    @Transactional(readOnly = true)
+    public List<ProfileReviewDTO> getProfilesForVerification() {
+        List<String> statuses = Arrays.asList("SUBMITTED", "VERIFIED", "REJECTED");
+        return userRepository.findByProfileVerificationStatusIn(statuses)
+                .stream()
+                .map(user -> new ProfileReviewDTO(
+                        user.getId(),
+                        user.getEmployeeId(),
+                        user.getFullName(),
+                        user.getProfileVerificationStatus()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfileDetailDTO getProfileDetailsForHr(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        List<Document> documents = documentRepository.findByUserId(userId);
+
+        UserProfileDetailDTO dto = new UserProfileDetailDTO();
+        dto.setUserId(user.getId());
+        dto.setFullName(user.getFullName());
+        dto.setEmail(user.getEmail());
+        dto.setEmployeeId(user.getEmployeeId());
+        dto.setDob(user.getDob());
+        dto.setFatherName(user.getFatherName());
+        dto.setMotherName(user.getMotherName());
+        dto.setEmergencyContactNumber(user.getEmergencyContactNumber());
+        dto.setIsFresher(user.getIsFresher());
+        dto.setProfileVerificationStatus(user.getProfileVerificationStatus());
+
+        // --- THIS IS THE CORRECTED LINE ---
+        dto.setDocuments(documents.stream().map(doc -> new DocumentDTO(
+                doc.getDocumentType(),
+                doc.getCustomDocumentName(),
+                java.nio.file.Paths.get(doc.getFilePath()).getFileName().toString(),
+                doc.getIsPreviousCompany() // <-- Add this 4th argument
+        )).collect(Collectors.toList()));
+
+        return dto;
+    }
+
+    @Transactional
+    public void approveProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        if (!"SUBMITTED".equals(user.getProfileVerificationStatus())) {
+            throw new IllegalStateException("Profile can only be approved if the status is SUBMITTED.");
+        }
+
+        user.setProfileVerificationStatus("VERIFIED");
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void rejectProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        if (!"SUBMITTED".equals(user.getProfileVerificationStatus())) {
+            throw new IllegalStateException("Profile can only be rejected if the status is SUBMITTED.");
+        }
+
+
+        user.setProfileVerificationStatus("PENDING");
+        userRepository.save(user);
     }
 }
